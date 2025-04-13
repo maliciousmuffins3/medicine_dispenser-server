@@ -7,6 +7,7 @@ const {
   getMilitaryTime,
   getApproachingSchedule,
   getNextSchedule,
+  convertToISODate,
 } = require("./utils");
 
 const port = 3000;
@@ -112,7 +113,8 @@ app.get("/get-schedule", async (req, res) => {
     }
 
     const sorted = getApproachingSchedule(medicineSnapshot);
-    return res.status(200).json(sorted[0]);
+    const updatedTime = convertToISODate(sorted[0]);
+    return res.status(200).json(updatedTime);
   } catch (err) {
     console.error("Error in /get-schedule:", err);
     return res.status(500).json({ error: "Internal server error" });
