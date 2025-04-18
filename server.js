@@ -2,13 +2,14 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const { db, rtdb } = require("./firebase");
 const nodemailer = require("nodemailer");
+
 const {
   addHours,
   getHourDifference,
   getMilitaryTime,
   getApproachingSchedule,
   getNextSchedule,
-  convertToISODate,
+  toLocalISOString
 } = require("./utils");
 
 const port = 3000;
@@ -24,7 +25,10 @@ app.get("/get-schedule", async (req, res) => {
   if (!UID) return res.status(400).json({ error: "UID is required" });
 
   try {
-    const medicineRef = db.collection("medicines").doc(UID).collection("schedules");
+    const medicineRef = db
+      .collection("medicines")
+      .doc(UID)
+      .collection("schedules");
     const medicineSnapshot = await medicineRef.get();
 
     if (medicineSnapshot.empty) {
@@ -39,7 +43,9 @@ app.get("/get-schedule", async (req, res) => {
     const stockData = stockSnap.val();
 
     if (stockData) {
-      const invalidKeys = Object.keys(stockData).filter((k) => !nameValues.includes(k));
+      const invalidKeys = Object.keys(stockData).filter(
+        (k) => !nameValues.includes(k)
+      );
       if (invalidKeys.length > 0) {
         const deleteOps = Object.fromEntries(invalidKeys.map((k) => [k, null]));
         await stocksRef.update(deleteOps);
@@ -47,7 +53,10 @@ app.get("/get-schedule", async (req, res) => {
       }
     }
 
-    const historyRef = db.collection("history").doc(UID).collection("medications");
+    const historyRef = db
+      .collection("history")
+      .doc(UID)
+      .collection("medications");
     const historySnapshot = await historyRef.get();
 
     const batch = db.batch();
@@ -68,12 +77,16 @@ app.get("/get-schedule", async (req, res) => {
       if (time && time < now && now - time >= 3600000 && status !== "Missed") {
         batch.update(doc.ref, { status: "Missed" });
 
-        const medicine = medicineArray.find((m) => m.medicineName === data.medicineName);
+        const medicine = medicineArray.find(
+          (m) => m.medicineName === data.medicineName
+        );
         if (!medicine) continue;
 
         let newTime = new Date(time.getTime());
         do {
-          newTime = new Date(newTime.getTime() + medicine.intervalValue * 3600000);
+          newTime = new Date(
+            newTime.getTime() + medicine.intervalValue * 3600000
+          );
         } while (newTime < new Date());
 
         const scheduledTime = getMilitaryTime(newTime);
@@ -93,29 +106,32 @@ app.get("/get-schedule", async (req, res) => {
     const updatedHistorySnapshot = await historyRef.get();
     const nextSchedule = getNextSchedule(updatedHistorySnapshot)?.[0];
 
-    if (!nextSchedule) return res.status(200).json({ message: "No upcoming schedule found" });
+    if (nextSchedule) {
+      const convertedTime = nextSchedule.time.toDate();
+      nextSchedule.time = toLocalISOString(new Date(convertedTime));
 
-    const convertedTime = nextSchedule.time.toDate();
-    nextSchedule.time = new Date(convertedTime).toISOString();
+      const nextRef = rtdb.ref(`nextSchedule/${UID}`);
+      const currentNextSnap = await nextRef.get();
+      const currentData = currentNextSnap.exists()
+        ? currentNextSnap.val()
+        : null;
 
-    const nextRef = rtdb.ref(`nextSchedule/${UID}`);
-    const currentNextSnap = await nextRef.get();
-    const currentData = currentNextSnap.exists() ? currentNextSnap.val() : null;
-
-    if (
-      typeof nextSchedule === "object" &&
-      Object.keys(nextSchedule).length > 0 &&
-      JSON.stringify(currentData) !== JSON.stringify(nextSchedule)
-    ) {
-      await nextRef.set(nextSchedule);
-      console.log("Updated next schedule in RTDB.");
-    } else {
-      console.log("Skipped next schedule update due to no change or invalid data.");
+      if (
+        typeof nextSchedule === "object" &&
+        Object.keys(nextSchedule).length > 0 &&
+        JSON.stringify(currentData) !== JSON.stringify(nextSchedule)
+      ) {
+        await nextRef.set(nextSchedule);
+        console.log("Updated next schedule in RTDB.");
+      } else {
+        console.log(
+          "Skipped next schedule update due to no change or invalid data."
+        );
+      }
     }
 
     const sorted = getApproachingSchedule(medicineSnapshot);
-    const updatedTime = convertToISODate(sorted[0]);
-    return res.status(200).json(updatedTime);
+    return res.status(200).json(sorted[0]);
   } catch (err) {
     console.error("Error in /get-schedule:", err);
     return res.status(500).json({ error: "Internal server error" });
@@ -127,7 +143,10 @@ app.post("/update-schedule", async (req, res) => {
   if (!UID) return res.status(400).json({ error: "UID is required" });
 
   try {
-    const schedRef = db.collection("medicines").doc(UID).collection("schedules");
+    const schedRef = db
+      .collection("medicines")
+      .doc(UID)
+      .collection("schedules");
     const snapshot = await schedRef.get();
 
     if (snapshot.empty) {
@@ -139,7 +158,8 @@ app.post("/update-schedule", async (req, res) => {
     if (!currentSchedule)
       return res.status(404).json({ error: "No approaching schedule" });
 
-    const { medicineName, medicineDose, intervalType, intervalValue } = currentSchedule;
+    const { medicineName, medicineDose, intervalType, intervalValue } =
+      currentSchedule;
     const historyQuery = db
       .collection("history")
       .doc(UID)
@@ -158,15 +178,13 @@ app.post("/update-schedule", async (req, res) => {
 
     if (intervalType === "once") {
       await deleteOneTimeMedication(UID, medicineName, medicineDose);
-      return res.status(200).json({ message: "One-time medicine taken and cleaned up." });
+      return res
+        .status(200)
+        .json({ message: "One-time medicine taken and cleaned up." });
     }
 
     const nextTime = addHours(new Date(), Number(intervalValue));
     const nextTimeStr = getMilitaryTime(nextTime);
-    
-    console.log("Next Schedule Date: " + nextTime.toISOString());
-    console.log("Next Schedule Time: " + nextTimeStr);
-
 
     await db.collection("history").doc(UID).collection("medications").add({
       medicineName,
@@ -236,61 +254,11 @@ app.post("/initial-config", async (req, res) => {
     await configRef.set(nextScheduleData);
     console.log("Configuration has been set.");
 
-    return res.status(200).json({ message: "Configuration has been set successfully." });
+    return res
+      .status(200)
+      .json({ message: "Configuration has been set successfully." });
   } catch (e) {
     return res.status(500).json({ message: "Internal Server Error" });
-  }
-});
-
-app.delete("/reconcile-history", async (req, res) => {
-  console.log("Received request on /reconcile-history");
-
-  const { UID } = req.query;
-  if (!UID) return res.status(400).json({ error: "UID is required" });
-
-  try {
-    const medicineRef = db.collection("medicines").doc(UID).collection("schedules");
-    const medicineSnapshot = await medicineRef.get();
-
-    const validMedicineNames = medicineSnapshot.docs.map(doc => doc.data().medicineName);
-    if (validMedicineNames.length === 0) {
-      return res.status(404).json({ error: "No medicines found in schedules." });
-    }
-
-    const historyRef = db.collection("history").doc(UID).collection("medications");
-    const historySnapshot = await historyRef.get();
-
-    const batch = db.batch();
-    let deletedHistory = [];
-    let orphanMedicines = new Set(validMedicineNames);
-
-    for (const doc of historySnapshot.docs) {
-      const data = doc.data();
-      const medicineName = data.medicineName;
-
-      if (!validMedicineNames.includes(medicineName)) {
-        batch.delete(doc.ref);
-        deletedHistory.push(medicineName);
-        console.log(`Deleting orphaned history record: ${medicineName}`);
-      } else {
-        orphanMedicines.delete(medicineName);
-      }
-    }
-
-    if (deletedHistory.length > 0) {
-      await batch.commit();
-    }
-
-    const medicinesWithNoHistory = Array.from(orphanMedicines);
-
-    return res.status(200).json({
-      deletedHistoryCount: deletedHistory.length,
-      deletedHistoryNames: deletedHistory,
-      medicinesWithNoHistory: medicinesWithNoHistory,
-    });
-  } catch (err) {
-    console.error("Error in /reconcile-history:", err);
-    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -307,8 +275,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const isValidEmail = (email) =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 app.get("/email-reminder", async (req, res) => {
   // ✅ Trim email input to remove whitespace issues
@@ -361,8 +328,6 @@ app.get("/email-reminder", async (req, res) => {
     return res.status(500).json({ error: "Failed to send email." });
   }
 });
-
-
 
 app.listen(port, () => {
   console.log(`Server is running on port http://localhost:${port}/`);
