@@ -92,33 +92,21 @@ function getNextSchedule(snapshot) {
   return sortedArray;
 }
 
-function convertToISODate(sorted) {
-  // Extract time and date from the object
-  let timeString = sorted.time; // "05:37"
-  let dateObj = sorted.date; // { _seconds: 1744580220, _nanoseconds: 0 }
+function toLocalISOString(date) {
+  const pad = (n) => n.toString().padStart(2, '0');
 
-  // Convert the timestamp to a JavaScript Date object
-  let timestamp = dateObj._seconds;
-  let date = new Date(timestamp * 1000); // Convert to milliseconds
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1); // getMonth is zero-based
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  const ms = date.getMilliseconds().toString().padStart(3, '0');
 
-  // Split the time string into hours and minutes
-  let timeParts = timeString.split(":");
-  let hours = parseInt(timeParts[0], 10);
-  let minutes = parseInt(timeParts[1], 10);
-
-  // Set the time on the Date object
-  date.setHours(hours);
-  date.setMinutes(minutes);
-
-  // Convert to ISO string
-  let isoString = date.toISOString();
-
-  // Add the isoDate to the object
-  sorted.date = isoString;
-
-  return sorted; // Return the updated object
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}Z`;
 }
 
 
 
-module.exports = { getHourDifference, addHours, getMilitaryTime, getApproachingSchedule, isMoreThanHoursAgo, getNextSchedule, convertToISODate};
+
+module.exports = { getHourDifference, addHours, getMilitaryTime, getApproachingSchedule, isMoreThanHoursAgo, getNextSchedule, toLocalISOString};
