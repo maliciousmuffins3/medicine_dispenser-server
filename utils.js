@@ -35,13 +35,13 @@ function getApproachingSchedule(snapshot){
     console.log(`Details - Interval Type: ${intervalType}, Interval Value: ${intervalValue}, Dose: ${medicineDose}, Time: ${time}, Date: ${date}`);
     medicineArray.push({ intervalType, intervalValue, medicineDose, medicineName, time, date, slotNumber });
   });
-
+  
   const approachingSchedules = medicineArray.filter((medicine) => {
     const currentDate = new Date();
     const { diffHours } = getHourDifference(currentDate, medicine.date.toDate());
     return diffHours <= 1; // Filter for schedules within the next hour
   });
-
+  
   const sortedApproachingScheds = approachingSchedules.sort((a, b) => {
     const dateA = getHourDifference(new Date(), a.date.toDate()).diffHours;
     const dateB = getHourDifference(new Date(), b.date.toDate()).diffHours;
