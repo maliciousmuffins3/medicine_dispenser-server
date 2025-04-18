@@ -13,14 +13,15 @@ function addHours(date, hours) {
 }
 
 function getMilitaryTime(date) {
-  const hours = date.getHours(); // Get the hour (0-23)
-  const minutes = date.getMinutes(); // Get the minutes (0-59)
+  const options = {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Manila'
+  };
 
-  // Pad hours and minutes with leading zeros if needed
-  const militaryHours = hours.toString().padStart(2, '0');
-  const militaryMinutes = minutes.toString().padStart(2, '0');
-
-  return `${militaryHours}:${militaryMinutes}`;
+  const formatter = new Intl.DateTimeFormat('en-PH', options);
+  return formatter.format(date); // e.g., "19:58"
 }
   
 
@@ -35,13 +36,13 @@ function getApproachingSchedule(snapshot){
     console.log(`Details - Interval Type: ${intervalType}, Interval Value: ${intervalValue}, Dose: ${medicineDose}, Time: ${time}, Date: ${date}`);
     medicineArray.push({ intervalType, intervalValue, medicineDose, medicineName, time, date, slotNumber });
   });
-  
+
   const approachingSchedules = medicineArray.filter((medicine) => {
     const currentDate = new Date();
     const { diffHours } = getHourDifference(currentDate, medicine.date.toDate());
     return diffHours <= 1; // Filter for schedules within the next hour
   });
-  
+
   const sortedApproachingScheds = approachingSchedules.sort((a, b) => {
     const dateA = getHourDifference(new Date(), a.date.toDate()).diffHours;
     const dateB = getHourDifference(new Date(), b.date.toDate()).diffHours;
