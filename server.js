@@ -162,6 +162,10 @@ app.post("/update-schedule", async (req, res) => {
 
     const nextTime = addHours(new Date(), Number(intervalValue));
     const nextTimeStr = getMilitaryTime(nextTime);
+    
+    console.log("Next Schedule Date: " + nextTime.toISOString());
+    console.log("Next Schedule Time: " + nextTimeStr);
+
 
     await db.collection("history").doc(UID).collection("medications").add({
       medicineName,
