@@ -93,18 +93,41 @@ function getNextSchedule(snapshot) {
 }
 
 function toLocalISOString(date) {
-  const pad = (n) => n.toString().padStart(2, '0');
+  // Ensure the date is valid
+  if (!(date instanceof Date) || isNaN(date)) {
+    throw new Error("Invalid Date object provided.");
+  }
 
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1); // getMonth is zero-based
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
-  const ms = date.getMilliseconds().toString().padStart(3, '0');
+  // Define the options for formatting the date in the 'Asia/Manila' time zone
+  const options = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3,  // Add milliseconds
+    timeZone: 'Asia/Manila',
+    hour12: false,  // 24-hour format
+  };
 
-  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}Z`;
+  // Use Intl.DateTimeFormat to format the date in the specified time zone
+  const formatter = new Intl.DateTimeFormat('en-PH', options);
+
+  // Format the date and return the ISO string
+  const parts = formatter.formatToParts(date);
+  const year = parts.find(part => part.type === 'year').value;
+  const month = parts.find(part => part.type === 'month').value;
+  const day = parts.find(part => part.type === 'day').value;
+  const hour = parts.find(part => part.type === 'hour').value;
+  const minute = parts.find(part => part.type === 'minute').value;
+  const second = parts.find(part => part.type === 'second').value;
+  const millisecond = String(date.getMilliseconds()).padStart(3, '0');
+
+  // Construct the local ISO string with milliseconds
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}.${millisecond}+08:00`;
 }
+
 
 
 
