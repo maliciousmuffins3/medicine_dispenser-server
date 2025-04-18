@@ -1,6 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const { db, rtdb } = require("./firebase");
+const nodemailer = require("nodemailer");
 const {
   addHours,
   getHourDifference,
@@ -292,6 +293,76 @@ app.delete("/reconcile-history", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// Email cooldown map: { email: timestamp }
+const emailCooldownMap = {};
+const COOLDOWN_MS = 1000 * 60 * 5; // 5 minutes
+
+// Nodemailer transporter
+const transporter = nodemailer.createTransport({
+  service: "gmail", // or another provider
+  auth: {
+    user: "medicine.dispenser.32@gmail.com",
+    pass: "vsnxbmyiqsihturw",
+  },
+});
+
+const isValidEmail = (email) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+app.get("/email-reminder", async (req, res) => {
+  // ✅ Trim email input to remove whitespace issues
+  const email = (req.query.email || "").trim();
+
+  // ❌ Basic validation failed
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "Invalid or missing email" });
+  }
+
+  // ⏱️ Enforce cooldown
+  const lastSent = emailCooldownMap[email];
+  const now = Date.now();
+
+  if (lastSent && now - lastSent < COOLDOWN_MS) {
+    const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastSent)) / 1000);
+    return res.status(429).json({
+      error: `Cooldown active. Try again in ${secondsLeft} seconds.`,
+    });
+  }
+
+  // 📩 Email content
+  const htmlContent = `
+    <div style="background-color: #e6f4ea; padding: 20px; border-radius: 8px; font-family: Arial, sans-serif; color: #2e7d32;">
+      <h2 style="color: #2e7d32;">⏰ Time to Take Your Medicine!</h2>
+      <p>Hey there! Just a friendly reminder to take your prescribed medication.</p>
+      <p>Health is wealth — stay consistent and stay healthy 💊</p>
+      <hr style="border-top: 1px solid #a5d6a7;">
+      <p style="font-size: 12px; color: #388e3c;">Sent by your smart medication scheduler</p>
+    </div>
+  `;
+
+  const mailOptions = {
+    from: '"Medicine Dispenser" <medicine.dispenser.32@gmail.com>',
+    to: email,
+    subject: "⏰ Time to Take Your Medicine!",
+    html: htmlContent,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    emailCooldownMap[email] = now;
+    console.log(`Email sent to ${email}`);
+    return res.status(200).json({
+      message: "Email sent successfully.",
+      email,
+    });
+  } catch (error) {
+    console.error("Error sending email:", error);
+    return res.status(500).json({ error: "Failed to send email." });
+  }
+});
+
+
 
 app.listen(port, () => {
   console.log(`Server is running on port http://localhost:${port}/`);
