@@ -32,6 +32,11 @@ app.get("/get-schedule", async (req, res) => {
     const medicineSnapshot = await medicineRef.get();
 
     if (medicineSnapshot.empty) {
+      try {
+        await rtdb.ref(`/nextSchedule/${UID}`).remove();
+      } catch (error) {
+        console.error("Error removing next schedule:", error);
+      }
       return res.status(404).json({ error: "No medicines found" });
     }
 
@@ -127,6 +132,13 @@ app.get("/get-schedule", async (req, res) => {
         console.log(
           "Skipped next schedule update due to no change or invalid data."
         );
+      }
+    }
+    else{
+      try {
+        await rtdb.ref(`/nextSchedule/${UID}`).remove();
+      } catch (error) {
+        console.error("Error removing next schedule:", error);
       }
     }
 
